@@ -1,0 +1,7 @@
+Options -Indexes
+<FilesMatch "^(db|config)\.php$">
+  Require all denied
+</FilesMatch>
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+</IfModule>

@@ -636,70 +636,6 @@ function ddg_search_url(string $query, int $page = 1): string
     return 'https://html.duckduckgo.com/html/?' . http_build_query(['q' => $query]);
 }
 
-function baidu_search_url(string $query, int $page = 1): string
-{
-    return 'https://www.baidu.com/s?' . http_build_query([
-        'wd' => $query, 'pn' => ($page - 1) * 10, 'rn' => 10
-    ]);
-}
-
-function extract_baidu_results(string $html): array
-{
-    libxml_use_internal_errors(true);
-    $doc = new DOMDocument();
-    $doc->loadHTML('<?xml encoding="utf-8" ?>' . $html);
-    $xpath = new DOMXPath($doc);
-    $items = []; $seen = [];
-    
-    // Try to find Baidu search results - Baidu uses various selectors
-    $resultSelectors = [
-        '//div[contains(@class,"result")]//h3/a',
-        '//div[contains(@class,"c-container")]//h3/a',
-        '//h3[contains(@class,"t")]/a'
-    ];
-    
-    foreach ($resultSelectors as $selector) {
-        $links = $xpath->query($selector);
-        if ($links->length > 0) {
-            foreach ($links as $a) {
-                $href = $a->getAttribute('href');
-                // Baidu uses redirect links, try to follow or just use as is
-                if (!filter_var($href, FILTER_VALIDATE_URL)) continue;
-                $host = parse_url($href, PHP_URL_HOST) ?: '';
-                if (str_contains($host, 'baidu.')) continue;
-                
-                $title = trim($a->textContent);
-                if ($title === '' || isset($seen[$href])) continue;
-                $seen[$href] = true;
-                
-                if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200) . '…';
-                
-                // Try to find snippet
-                $snippet = '';
-                $div = $a;
-                for ($i = 0; $i < 6; $i++) { $div = $div->parentNode; if (!$div) break; }
-                if ($div) {
-                    $snippet = trim(preg_replace('/\s+/u', ' ', $div->textContent));
-                    $snippet = str_replace($title, '', $snippet);
-                    if (mb_strlen($snippet) > 240) $snippet = mb_substr($snippet, 0, 240) . '…';
-                }
-                
-                $items[] = [
-                    'title' => $title, 'url' => $href,
-                    'open_url' => redirect_url_for($href, ''),
-                    'display_url' => preg_replace('#^https?://#', '', $href),
-                    'snippet' => $snippet,
-                ];
-                if (count($items) >= 10) break;
-            }
-            if (count($items) > 0) break;
-        }
-    }
-    
-    libxml_clear_errors();
-    return $items;
-}
-
 function extract_startpage_results(string $html): array
 {
     libxml_use_internal_errors(true);
@@ -863,7 +799,6 @@ function selected_search_source(array $settings): string
     if ($host === '127.0.0.1' || $host === 'localhost') return 'searxng';
     if (str_contains($host, 'duckduckgo.')) return 'duckduckgo';
     if (str_contains($host, 'startpage.')) return 'startpage';
-    if (str_contains($host, 'baidu.')) return 'baidu';
     return 'google';
 }
 
@@ -878,11 +813,6 @@ function html_search(string $source, string $query, array $settings, int $page):
         $resp = curl_get(startpage_search_url($query, $page), $settings);
         if (is_resource_exhausted_response($resp['body'], $resp['status']) || is_bot_challenge_response($resp['body'])) return [];
         return extract_startpage_results($resp['body']);
-    }
-    if ($source === 'baidu') {
-        $resp = curl_get(baidu_search_url($query, $page), $settings);
-        if (is_resource_exhausted_response($resp['body'], $resp['status']) || is_bot_challenge_response($resp['body'])) return [];
-        return extract_baidu_results($resp['body']);
     }
     $resp = curl_get(google_search_url($query, $settings, $page), $settings);
     if (is_resource_exhausted_response($resp['body'], $resp['status']) || is_bot_challenge_response($resp['body'])) return [];
@@ -919,58 +849,36 @@ function perform_search(string $query, array $settings, int $page = 1): array
         }
     } catch (Throwable $e) {}
 
-    // 定义要尝试的搜索引擎列表（按优先级）
-    $searchEngines = ['duckduckgo', 'startpage', 'google', 'baidu'];
-    
-    // 根据 google_domain 设置调整优先级
+    // 根据 google_domain 设置选择搜索引擎
     $domain = (string)($settings['google_domain'] ?? '');
-    $primarySource = 'duckduckgo';
     if (str_contains($domain, 'duckduckgo')) {
-        $primarySource = 'duckduckgo';
+        $source = 'duckduckgo';
     } elseif (str_contains($domain, 'startpage')) {
-        $primarySource = 'startpage';
-    } elseif (str_contains($domain, 'baidu')) {
-        $primarySource = 'baidu';
+        $source = 'startpage';
     } else {
-        $primarySource = 'google';
+        $source = 'google';
     }
-    
-    // 把首选引擎放到第一位
-    $searchEngines = array_diff($searchEngines, [$primarySource]);
-    array_unshift($searchEngines, $primarySource);
-    
     $proxyEnabled = bool_setting($settings, 'proxy_enabled');
-    $directSettings = $settings;
-    $directSettings['proxy_enabled'] = '0';
-    
-    // 先尝试直接连接（无代理）
-    foreach ($searchEngines as $source) {
-        try {
-            $results = html_search($source, $query, $directSettings, $page);
-            if (!empty($results)) {
-                log_search($query, count($results), 'ok', $logRoute . $source, '', $source);
-                return ['results' => $results, 'page' => $page, 'via_proxy' => false, 'source' => $source];
-            }
-        } catch (Throwable $e) {
-            error_log("Search with $source (direct) failed: " . $e->getMessage());
-        }
-    }
-    
-    // 如果有代理配置，再尝试通过代理
     if ($proxyEnabled && $proxyConfig !== null) {
-        foreach ($searchEngines as $source) {
-            try {
-                $results = html_search($source, $query, $settings, $page);
-                if (!empty($results)) {
-                    log_search($query, count($results), 'ok', $logRoute . $source, $proxyIp, $source);
-                    return ['results' => $results, 'page' => $page, 'via_proxy' => true, 'source' => $source];
-                }
-            } catch (Throwable $e) {
-                error_log("Search with $source (proxy) failed: " . $e->getMessage());
+        try {
+            $results = html_search($source, $query, $settings, $page);
+            if (!empty($results)) {
+                log_search($query, count($results), 'ok', $logRoute . $source, $proxyIp, $source);
+                return ['results' => $results, 'page' => $page, 'via_proxy' => true, 'source' => $source];
             }
-        }
+        } catch (Throwable $e) {}
     }
 
-    log_search($query, 0, 'resource_exhausted', $logRoute . implode(',', $searchEngines), $proxyIp, '所有搜索引擎均不可用');
+    $directSettings = $settings;
+    $directSettings['proxy_enabled'] = '0';
+    try {
+        $results = html_search($source, $query, $directSettings, $page);
+        if (!empty($results)) {
+            log_search($query, count($results), 'ok', $logRoute . $source, '', $source);
+            return ['results' => $results, 'page' => $page, 'via_proxy' => $proxyEnabled, 'source' => $source];
+        }
+    } catch (Throwable $e) {}
+
+    log_search($query, 0, 'resource_exhausted', $logRoute . 'searxng,' . $source, $proxyIp, '所有搜索引擎均不可用');
     return ['results' => [], 'page' => $page, 'resource_exhausted' => true, 'message' => '因资源耗尽，请稍等再访问'];
 }
