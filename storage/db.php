@@ -1,9 +1,6 @@
 <?php
 return array (
-  'host' => 'db',
-  'port' => 3306,
-  'database' => 'wow_search',
-  'username' => 'admin',
-  'password' => 'rootroot',
-  'installed_at' => '2026-05-22T19:27:01+00:00',
+  'type' => 'sqlite',
+  'path' => '/workspace/app/../storage/database.sqlite',
+  'installed_at' => '2026-05-23T16:09:28+00:00',
 );

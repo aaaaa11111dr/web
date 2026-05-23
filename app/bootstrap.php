@@ -51,18 +51,16 @@ function db_config(): array
 function pdo(): PDO {
     static $pdo = null;
     if ($pdo === null) {
-        $host = 'localhost';
-        $db   = 'roota';
-        $user = 'roota';
-        $pass = '900001';
-        
+        $sqliteFile = APP_ROOT . '/storage/database.sqlite';
         try {
             $pdo = new PDO(
-                "mysql:host=$host;dbname=$db;charset=utf8mb4",
-                $user,
-                $pass,
+                "sqlite:" . $sqliteFile,
+                null,
+                null,
                 [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
             );
+            // 启用外键约束
+            $pdo->exec("PRAGMA foreign_keys = ON");
         } catch (PDOException $e) {
             die("数据库连接失败: " . $e->getMessage());
         }
@@ -187,7 +185,7 @@ function get_settings(): array
 
 function set_setting(string $name, string $value): void
 {
-    $stmt = pdo()->prepare('INSERT INTO `settings` (`name`, `value`, `updated_at`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `updated_at` = VALUES(`updated_at`)');
+    $stmt = pdo()->prepare('INSERT OR REPLACE INTO settings (name, value, updated_at) VALUES (?, ?, ?)');
     $stmt->execute([$name, $value, now()]);
 }
 
@@ -321,13 +319,16 @@ function scalar_query(string $sql): int
 
 function get_site_stats(): array
 {
+    $today = date('Y-m-d');
+    $sevenDaysAgo = date('Y-m-d', strtotime('-6 days'));
+    
     $stats = [
-        'total_searches' => scalar_query('SELECT COUNT(*) FROM `search_logs`'),
-        'today_searches' => scalar_query('SELECT COUNT(*) FROM `search_logs` WHERE `created_at` >= CURDATE()'),
-        'total_search_ips' => scalar_query('SELECT COUNT(DISTINCT `ip`) FROM `search_logs`'),
-        'today_search_ips' => scalar_query('SELECT COUNT(DISTINCT `ip`) FROM `search_logs` WHERE `created_at` >= CURDATE()'),
-        'total_proxy_views' => scalar_query('SELECT COUNT(*) FROM `page_proxy_logs`'),
-        'today_proxy_views' => scalar_query('SELECT COUNT(*) FROM `page_proxy_logs` WHERE `created_at` >= CURDATE()'),
+        'total_searches' => scalar_query('SELECT COUNT(*) FROM search_logs'),
+        'today_searches' => scalar_query("SELECT COUNT(*) FROM search_logs WHERE created_at >= '{$today}'"),
+        'total_search_ips' => scalar_query('SELECT COUNT(DISTINCT ip) FROM search_logs'),
+        'today_search_ips' => scalar_query("SELECT COUNT(DISTINCT ip) FROM search_logs WHERE created_at >= '{$today}'"),
+        'total_proxy_views' => scalar_query('SELECT COUNT(*) FROM page_proxy_logs'),
+        'today_proxy_views' => scalar_query("SELECT COUNT(*) FROM page_proxy_logs WHERE created_at >= '{$today}'"),
         'top_keywords' => [],
         'top_keywords_today' => [],
         'top_keywords_7d' => [],
@@ -335,15 +336,15 @@ function get_site_stats(): array
         'proxy_trend' => [],
         'top_ads' => [],
     ];
-    try { $stats['top_keywords'] = pdo()->query('SELECT `keyword`, COUNT(*) AS `total` FROM `search_logs` GROUP BY `keyword` ORDER BY `total` DESC LIMIT 10')->fetchAll(); } catch (Throwable $e) {}
-    try { $stats['top_keywords_today'] = pdo()->query('SELECT `keyword`, COUNT(*) AS `total` FROM `search_logs` WHERE `created_at` >= CURDATE() GROUP BY `keyword` ORDER BY `total` DESC LIMIT 10')->fetchAll(); } catch (Throwable $e) {}
-    try { $stats['top_keywords_7d'] = pdo()->query('SELECT `keyword`, COUNT(*) AS `total` FROM `search_logs` WHERE `created_at` >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY `keyword` ORDER BY `total` DESC LIMIT 10')->fetchAll(); } catch (Throwable $e) {}
-    try { $stats['top_ads'] = pdo()->query('SELECT `pool_key`, `title`, `views` FROM `ad_pool` ORDER BY `views` DESC, `id` DESC LIMIT 10')->fetchAll(); } catch (Throwable $e) {}
+    try { $stats['top_keywords'] = pdo()->query('SELECT keyword, COUNT(*) AS total FROM search_logs GROUP BY keyword ORDER BY total DESC LIMIT 10')->fetchAll(); } catch (Throwable $e) {}
+    try { $stats['top_keywords_today'] = pdo()->query("SELECT keyword, COUNT(*) AS total FROM search_logs WHERE created_at >= '{$today}' GROUP BY keyword ORDER BY total DESC LIMIT 10")->fetchAll(); } catch (Throwable $e) {}
+    try { $stats['top_keywords_7d'] = pdo()->query("SELECT keyword, COUNT(*) AS total FROM search_logs WHERE created_at >= '{$sevenDaysAgo}' GROUP BY keyword ORDER BY total DESC LIMIT 10")->fetchAll(); } catch (Throwable $e) {}
+    try { $stats['top_ads'] = pdo()->query('SELECT pool_key, title, views FROM ad_pool ORDER BY views DESC, id DESC LIMIT 10')->fetchAll(); } catch (Throwable $e) {}
     $days = [];
     for ($i = 6; $i >= 0; $i--) $days[date('Y-m-d', strtotime('-' . $i . ' days'))] = 0;
     foreach (['search_trend' => 'search_logs', 'proxy_trend' => 'page_proxy_logs'] as $key => $table) {
         $rows = [];
-        try { $rows = pdo()->query("SELECT DATE(`created_at`) AS `day`, COUNT(*) AS `total` FROM `{$table}` WHERE `created_at` >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(`created_at`) ORDER BY `day`")->fetchAll(); } catch (Throwable $e) {}
+        try { $rows = pdo()->query("SELECT SUBSTR(created_at, 1, 10) AS day, COUNT(*) AS total FROM {$table} WHERE created_at >= '{$sevenDaysAgo}' GROUP BY day ORDER BY day")->fetchAll(); } catch (Throwable $e) {}
         $trend = $days;
         foreach ($rows as $row) $trend[(string)$row['day']] = (int)$row['total'];
         $stats[$key] = $trend;
