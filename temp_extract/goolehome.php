@@ -144,7 +144,7 @@ $poolKeys = [
 
 <div class="admin-page" id="page-search"><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="search-settings"><div class="panel"><div class="panel-head"><div><h2>站点信息 / SEO 设置</h2><p class="muted">这里统一管理前台显示文字和页面 TDK；可用变量：{site_name}=站点名称，{q}=搜索关键词。</p></div><label class="switch"><input type="checkbox" name="search_enabled" <?= bool_setting($settings,'search_enabled')?'checked':'' ?>><span></span>启用搜索</label></div><div class="form-grid"><div class="form-section-title span-2"><strong>基础展示</strong><small>控制首页品牌名、搜索框下方提示和页脚文字。</small></div><label>站点名称<input name="site_name" value="<?= e($settings['site_name']) ?>" placeholder="Search"></label><label>首页提示文字<input name="site_notice" value="<?= e($settings['site_notice']) ?>" placeholder="仅限内部人员使用。"></label><label class="span-2">底部文字<input name="footer_notice" value="<?= e($settings['footer_notice']) ?>" placeholder="请用于正规用途"></label><div class="form-section-title span-2"><strong>首页 TDK</strong><small>未搜索时首页输出的标题、描述和关键词。</small></div><label class="span-2">首页 Title<input name="home_title" value="<?= e($settings['home_title']) ?>" placeholder="{site_name}"></label><label class="span-2">首页 Description<textarea name="home_description" rows="2" placeholder="内部搜索系统"><?= e($settings['home_description']) ?></textarea></label><label class="span-2">首页 Keywords<input name="home_keywords" value="<?= e($settings['home_keywords']) ?>" placeholder="搜索,内部搜索"></label><div class="form-section-title span-2"><strong>搜索结果页 TDK</strong><small>搜索结果页会把 {q} 自动替换成用户搜索词。</small></div><label class="span-2">结果页 Title 模板<input name="result_title" value="<?= e($settings['result_title']) ?>" placeholder="{q} - {site_name}"></label><label class="span-2">结果页 Description 模板<textarea name="result_description" rows="2" placeholder="{q} 的搜索结果"><?= e($settings['result_description']) ?></textarea></label><label class="span-2">结果页 Keywords 模板<input name="result_keywords" value="<?= e($settings['result_keywords']) ?>" placeholder="{q},{site_name}"></label><div class="form-section-title span-2"><strong>搜索参数</strong><small>超时时间、频率限制等高级设置。</small></div><label>超时时间(秒)<input type="number" name="timeout" min="5" max="60" value="<?= e($settings['timeout']) ?>"></label><label>频率限制(秒)<input type="number" name="rate_limit_seconds" min="0" max="30" value="<?= e($settings['rate_limit_seconds']) ?>"></label><label>翻页倒计时(秒)<input type="number" name="pager_countdown_seconds" min="1" max="300" value="<?= e($settings['pager_countdown_seconds']) ?>"></label><label>跳转倒计时(秒)<input type="number" name="redirect_countdown_seconds" min="1" max="300" value="<?= e($settings['redirect_countdown_seconds']) ?>"></label><label class="span-2">搜索引擎域名<input name="google_domain" value="<?= e($settings['google_domain']) ?>" placeholder="https://www.google.com"><small style="color:#0066cc">💡 支持：Google(默认)、DuckDuckGo(https://duckduckgo.com)、StartPage(https://www.startpage.com)、本地Searxng(http://127.0.0.1:8888)</small></label></div><div class="panel-foot"><button type="submit">保存</button></div></div></form></div>
 
-<div class="admin-page" id="page-proxy"><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="proxy-settings"><div class="panel"><div class="panel-head"><h2>代理配置</h2><div class="switches"><label class="switch"><input type="checkbox" name="proxy_enabled" <?= bool_setting($settings,'proxy_enabled')?'checked':'' ?>><span></span>搜索代理</label><label class="switch"><input type="checkbox" name="page_proxy_enabled" <?= bool_setting($settings,'page_proxy_enabled')?'checked':'' ?>><span></span>页面代理</label></div></div><div class="form-grid"><label>代理类型<select name="proxy_type"><?php foreach(['http'=>'HTTP','https'=>'HTTPS','socks4'=>'SOCKS4','socks5'=>'SOCKS5'] as $k=>$v): ?><option value="<?=e($k)?>" <?=$settings['proxy_type']===$k?'selected':''?>><?=e($v)?></option><?php endforeach; ?></select></label><label>代理模式<select name="proxy_mode"><option value="rotate" <?= ($settings['proxy_mode'] ?? 'rotate') === 'rotate' ? 'selected' : '' ?>>轮询模式（依次使用每条代理）</option><option value="single" <?= ($settings['proxy_mode'] ?? '') === 'single' ? 'selected' : '' ?>>单一模式（固定使用第一条）</option></select><small style="color:#666">轮询=每次请求自动切换代理；单一=始终使用第一条代理</small></label><label>轮换间隔(秒)<input type="number" name="proxy_rotate_seconds" min="30" max="3600" value="<?= e($settings['proxy_rotate_seconds']) ?>"></label><label>缓存(秒)<input type="number" name="cache_seconds" min="0" max="3600" value="<?= e($settings['cache_seconds']) ?>"></label><label class="span-2">代理端口池<small style="color:#0066cc">💡 支持两种格式：<br>1. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">IP地址:端口</code> 如 <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">1.2.3.4:8080</code><br>2. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">域名:端口</code> 如 <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">proxy.example.com:8080</code><br>带认证：<code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">1.2.3.4:8080:user:pass</code><br>✅ 如果使用域名，日志中会自动显示解析后的IPv4地址</small><textarea name="proxy_ports" rows="8" placeholder="1.2.3.4:10001&#10;proxy.example.com:10002"><?= e($settings['proxy_ports']) ?></textarea></label></div><div class="panel-foot"><button type="submit">保存</button></div></div></form></div>
+<div class="admin-page" id="page-proxy"><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="proxy-settings"><div class="panel"><div class="panel-head"><h2>代理配置</h2><div class="switches"><label class="switch"><input type="checkbox" name="proxy_enabled" <?= bool_setting($settings,'proxy_enabled')?'checked':'' ?>><span></span>搜索代理</label><label class="switch"><input type="checkbox" name="page_proxy_enabled" <?= bool_setting($settings,'page_proxy_enabled')?'checked':'' ?>><span></span>页面代理</label></div></div><div class="form-grid"><label>代理类型<select name="proxy_type"><?php foreach(['http'=>'HTTP','https'=>'HTTPS','socks4'=>'SOCKS4','socks5'=>'SOCKS5'] as $k=>$v): ?><option value="<?=e($k)?>" <?=$settings['proxy_type']===$k?'selected':''?>><?=e($v)?></option><?php endforeach; ?></select></label><label>代理模式<select name="proxy_mode"><option value="rotate" <?= ($settings['proxy_mode'] ?? 'rotate') === 'rotate' ? 'selected' : '' ?>>轮询模式（依次使用每条代理）</option><option value="single" <?= ($settings['proxy_mode'] ?? '') === 'single' ? 'selected' : '' ?>>单一模式（固定使用第一条）</option></select><small style="color:#666">轮询=每次请求自动切换代理；单一=始终使用第一条代理</small></label><label>轮换间隔(秒)<input type="number" name="proxy_rotate_seconds" min="30" max="3600" value="<?= e($settings['proxy_rotate_seconds']) ?>"></label><label>缓存(秒)<input type="number" name="cache_seconds" min="0" max="3600" value="<?= e($settings['cache_seconds']) ?>"></label><label class="span-2">代理端口池<small style="color:#0066cc">💡 使用方式：<span id="proxyModeHint"><?= ($settings['proxy_mode'] ?? 'rotate') === 'rotate' ? '每次搜索请求按顺序轮询使用代理（第1条→第2条→...→第1条循环）' : '固定使用列表中的第一条代理' ?></span><br>格式：每行一个，支持 host:port 或 host:port:user:pass</small><textarea name="proxy_ports" rows="8" placeholder="1.2.3.4:10001&#10;1.2.3.4:10002:user:pass"><?= e($settings['proxy_ports']) ?></textarea></label></div><div class="panel-foot"><button type="submit">保存</button></div></div></form></div>
 
 <div class="admin-page" id="page-ad">
 <div class="panel"><div class="panel-head"><h2>广告配置</h2><p class="muted">代码广告会原样输出到前台，请仅粘贴可信广告平台代码。</p></div>
@@ -168,67 +168,13 @@ $poolKeys = [
 <div class="admin-page" id="page-tools"><div class="panel"><div class="panel-head"><h2>维护工具</h2></div><div class="tools-grid"><form method="post" class="tools-item"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="test_search"><button class="secondary">测试搜索连通性</button></form><form method="post" class="tools-item"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="password"><input type="password" name="current_admin_password" placeholder="当前密码" required><input type="password" name="new_admin_password" minlength="8" placeholder="新密码" required><button class="secondary">改密码</button></form></div></div></div>
 
 <div class="admin-page" id="page-logs">
-<div class="panel">
-  <div class="panel-head">
-    <h2>日志管理 <small style="font-weight:normal;color:#666">(搜索代理: <?= $totalLogs ?> 条 | 页面代理: <?= $totalProxyLogs ?> 条)</small></h2>
-    <form method="post" id="clearLogsForm" style="display:flex;gap:8px">
-      <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-      <input type="hidden" name="action" value="clear_logs">
-      <select name="clear_type" id="clearTypeSelect" class="secondary" style="padding:6px 10px" required>
-        <option value="">-- 选择要清空的日志 --</option>
-        <option value="search">清空搜索代理日志 (<?= $totalLogs ?> 条)</option>
-        <option value="proxy">清空页面代理日志 (<?= $totalProxyLogs ?> 条)</option>
-        <option value="all">清空所有日志</option>
-      </select>
-      <button class="secondary" type="submit" onclick="return confirmClear()">清空日志</button>
-    </form>
-  </div>
-  
-  <!-- 代理IP显示控件 -->
-  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
-    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
-          </svg>
-        </div>
-        <div>
-          <div style="color: white; font-size: 14px; opacity: 0.9;">最近使用的代理</div>
-          <div style="color: white; font-size: 24px; font-weight: bold;" id="recentProxyDisplay">
-            <?php 
-              $recentProxy = '-';
-              foreach($logs as $log) {
-                if (!empty($log['proxy_ip'])) {
-                  $recentProxy = $log['proxy_ip'];
-                  break;
-                }
-              }
-              echo e($recentProxy);
-            ?>
-          </div>
-        </div>
-      </div>
-      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <div style="background: rgba(255,255,255,0.2); padding: 10px 16px; border-radius: 8px; color: white;">
-          <div style="font-size: 12px; opacity: 0.8;">搜索代理日志</div>
-          <div style="font-size: 20px; font-weight: bold;"><?= e((string)$totalLogs) ?></div>
-        </div>
-        <div style="background: rgba(255,255,255,0.2); padding: 10px 16px; border-radius: 8px; color: white;">
-          <div style="font-size: 12px; opacity: 0.8;">页面代理日志</div>
-          <div style="font-size: 20px; font-weight: bold;"><?= e((string)$totalProxyLogs) ?></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+<div class="panel"><div class="panel-head"><h2>日志管理 <small style="font-weight:normal;color:#666">(搜索代理: <?= $totalLogs ?> 条 | 页面代理: <?= $totalProxyLogs ?> 条)</small></h2><form method="post" id="clearLogsForm" style="display:flex;gap:8px"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="clear_logs"><select name="clear_type" id="clearTypeSelect" class="secondary" style="padding:6px 10px" required><option value="">-- 选择要清空的日志 --</option><option value="search">清空搜索代理日志 (<?= $totalLogs ?> 条)</option><option value="proxy">清空页面代理日志 (<?= $totalProxyLogs ?> 条)</option><option value="all">清空所有日志</option></select><button class="secondary" type="submit" onclick="return confirmClear()">清空日志</button></form></div></div>
 
 <div class="panel">
   <div class="panel-head"><h3>搜索代理日志 <small style="font-weight:normal;color:#666">(每页10条)</small></h3></div>
   <div class="table-wrap">
     <table><thead><tr><th>时间</th><th>访客IP</th><th>关键词</th><th>线路</th><th>代理IP</th><th>搜索引擎</th><th>结果数</th><th>状态</th></tr></thead>
-    <tbody><?php foreach($logs as $log): ?><tr><td><?=e($log['created_at'])?></td><td><?=e($log['ip'])?></td><td><?=e($log['keyword'])?></td><td><?php $isProxy = search_log_route_label($log)==='代理'; ?><span class="route-badge <?= $isProxy?'proxy':'direct' ?>"><?= e(search_log_route_label($log)) ?></span></td><td><?php if (!empty($log['proxy_ip'])): ?><span style="display:inline-block;background:linear-gradient(135deg,#10b981,#059669);color:white;padding:6px 12px;border-radius:8px;font-weight:bold;font-family:monospace;"><?=e($log['proxy_ip'])?></span><?php else: ?><span style="color:#9ca3af;">-</span><?php endif; ?></td><td><?=e($log['search_source'] ?: '-')?></td><td><?=e((string)$log['result_count'])?></td><td><?=e($log['status'])?></td></tr><?php endforeach; ?><?php if (!$logs): ?><tr><td colspan="8" class="muted">暂无日志</td></tr><?php endif; ?></tbody>
+    <tbody><?php foreach($logs as $log): ?><tr><td><?=e($log['created_at'])?></td><td><?=e($log['ip'])?></td><td><?=e($log['keyword'])?></td><td><span class="route-badge <?= search_log_route_label($log)==='代理'?'proxy':'direct' ?>"><?= e(search_log_route_label($log)) ?></span></td><td><?=e($log['proxy_ip'] ?: '-')?></td><td><?=e($log['search_source'] ?: '-')?></td><td><?=e((string)$log['result_count'])?></td><td><?=e($log['status'])?></td></tr><?php endforeach; ?><?php if (!$logs): ?><tr><td colspan="8" class="muted">暂无日志</td></tr><?php endif; ?></tbody>
     </table>
   </div>
   <div class="panel-foot" style="display:flex;justify-content:center;gap:10px;align-items:center">
@@ -243,65 +189,11 @@ $poolKeys = [
   </div>
 </div>
 
-<!-- 代理IP使用统计 -->
-<div class="panel">
-  <div class="panel-head"><h3>代理IP使用统计</h3></div>
-  <div style="display:flex;flex-wrap:wrap;gap:12px;padding:20px;">
-    <?php
-      $proxyStats = [];
-      foreach($logs as $log) {
-        if (!empty($log['proxy_ip'])) {
-          if (!isset($proxyStats[$log['proxy_ip']])) {
-            $proxyStats[$log['proxy_ip']] = 0;
-          }
-          $proxyStats[$log['proxy_ip']]++;
-        }
-      }
-      foreach($proxyLogs as $log) {
-        if (!empty($log['proxy_ip'])) {
-          if (!isset($proxyStats[$log['proxy_ip']])) {
-            $proxyStats[$log['proxy_ip']] = 0;
-          }
-          $proxyStats[$log['proxy_ip']]++;
-        }
-      }
-      arsort($proxyStats);
-      if (empty($proxyStats)) {
-        echo '<div style="color:#9ca3af;padding:20px;">暂无代理IP记录</div>';
-      } else {
-        foreach($proxyStats as $ip => $count) {
-    ?>
-    <div style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid #bae6fd;border-radius:12px;padding:16px;min-width:180px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:32px;height:32px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);border-radius:8px;display:flex;align-items:center;justify-content:center;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
-            </svg>
-          </div>
-          <div style="font-weight:bold;color:#1e40af;font-family:monospace;"><?=e($ip)?></div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div style="flex:1;height:6px;background:#e0e7ff;border-radius:3px;overflow:hidden;">
-          <div style="height:100%;background:linear-gradient(90deg,#3b82f6,#1d4ed8);width:<?=min(100, $count * 10)?>%;"></div>
-        </div>
-        <span style="color:#1e40af;font-weight:bold;"><?=e((string)$count)?></span>
-      </div>
-    </div>
-    <?php
-        }
-      }
-    ?>
-  </div>
-</div>
-
 <div class="panel">
   <div class="panel-head"><h3>页面代理日志 <small style="font-weight:normal;color:#666">(每页10条)</small></h3></div>
   <div class="table-wrap">
-    <table><thead><tr><th>时间</th><th>访客IP</th><th>目标URL</th><th>代理IP</th><th>状态码</th></tr></thead>
-    <tbody><?php foreach($proxyLogs as $log): ?><tr><td><?=e($log['created_at'])?></td><td><?=e($log['ip'])?></td><td title="<?=e($log['target_url'])?>"><?=e(mb_substr($log['target_url'], 0, 60))?><?=mb_strlen($log['target_url']) > 60 ? '...' : ''?></td><td><?php if (!empty($log['proxy_ip'])): ?><span style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:white;padding:6px 12px;border-radius:8px;font-weight:bold;font-family:monospace;"><?=e($log['proxy_ip'])?></span><?php else: ?><span style="color:#9ca3af;">-</span><?php endif; ?></td><td><?=e((string)$log['status_code'])?></td></tr><?php endforeach; ?><?php if (!$proxyLogs): ?><tr><td colspan="5" class="muted">暂无日志</td></tr><?php endif; ?></tbody>
+    <table><thead><tr><th>时间</th><th>访客IP</th><th>目标URL</th><th>状态码</th></tr></thead>
+    <tbody><?php foreach($proxyLogs as $log): ?><tr><td><?=e($log['created_at'])?></td><td><?=e($log['ip'])?></td><td title="<?=e($log['target_url'])?>"><?=e(mb_substr($log['target_url'], 0, 60))?><?=mb_strlen($log['target_url']) > 60 ? '...' : ''?></td><td><?=e((string)$log['status_code'])?></td></tr><?php endforeach; ?><?php if (!$proxyLogs): ?><tr><td colspan="4" class="muted">暂无日志</td></tr><?php endif; ?></tbody>
     </table>
   </div>
   <div class="panel-foot" style="display:flex;justify-content:center;gap:10px;align-items:center">

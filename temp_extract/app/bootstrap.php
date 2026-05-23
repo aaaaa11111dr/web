@@ -48,25 +48,18 @@ function db_config(): array
     return is_array($cfg) ? $cfg : [];
 }
 
-function pdo(): PDO {
+function pdo(): PDO
+{
     static $pdo = null;
-    if ($pdo === null) {
-        $host = 'localhost';
-        $db   = 'roota';
-        $user = 'roota';
-        $pass = '900001';
-        
-        try {
-            $pdo = new PDO(
-                "mysql:host=$host;dbname=$db;charset=utf8mb4",
-                $user,
-                $pass,
-                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-            );
-        } catch (PDOException $e) {
-            die("数据库连接失败: " . $e->getMessage());
-        }
-    }
+    if ($pdo instanceof PDO) return $pdo;
+    $cfg = db_config();
+    if (!$cfg) throw new RuntimeException('系统尚未安装。');
+    $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $cfg['host'], (int)$cfg['port'], $cfg['database']);
+    $pdo = new PDO($dsn, (string)$cfg['username'], (string)$cfg['password'], [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
     return $pdo;
 }
 
@@ -504,7 +497,7 @@ function matched_blocked_keyword(string $query, array $settings): ?string
 function is_resource_exhausted_response(string $body, int $status): bool
 {
     $sample = mb_strtolower(mb_substr(strip_tags($body), 0, 3000));
-    return $status === 429 || str_contains($sample, 'unusual traffic') || str_contains($sample, 'captcha') || str_contains($sample, 'our systems have detected') || str_contains($sample, 'detected unusual');
+    return $status === 429 || str_contains($sample, 'unusual traffic') || str_contains($sample, 'captcha') || str_contains($sample, 'our systems have detected') || str_contains($sample, 'sorry') || str_contains($sample, 'detected unusual');
 }
 
 // -- Proxy pool --
@@ -516,21 +509,6 @@ function parse_proxy_line(string $line): ?array
     $host = $parts[0] ?? ''; $port = $parts[1] ?? ''; $user = $parts[2] ?? null; $pass = $parts[3] ?? null;
     if ($host === '' || $port === '' || !is_numeric($port)) return null;
     return ['host' => $host, 'port' => $port, 'user' => $user ?? '', 'pass' => $pass ?? ''];
-}
-
-function resolve_proxy_to_ipv4(string $host): string
-{
-    if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-        return $host;
-    }
-    if (function_exists('gethostbyname')) {
-        $ip = gethostbyname($host);
-        if ($ip === $host) {
-            return $host;
-        }
-        return $ip;
-    }
-    return $host;
 }
 
 function parse_proxy_pool(string $raw): array
@@ -563,21 +541,12 @@ function current_proxy_config(array $settings): ?array
     $rotate = int_setting($settings, 'proxy_rotate_seconds', 30, 3600, 180);
     $mode = ($settings['proxy_mode'] ?? 'rotate') === 'single' ? 'single' : 'rotate';
     $idx = selected_proxy_index($pool, $rotate, $mode);
-    $host = $pool[$idx]['host'];
-    try {
-        $resolvedHost = resolve_proxy_to_ipv4($host);
-        $proxyIp = $resolvedHost . ':' . $pool[$idx]['port'];
-    } catch (Throwable $e) {
-        $resolvedHost = $host;
-        $proxyIp = $host . ':' . $pool[$idx]['port'];
-    }
-    return array_merge($pool[$idx], ['_idx' => $idx, '_total' => count($pool), '_proxy_ip' => $proxyIp, '_mode' => $mode, '_resolved_host' => $resolvedHost]);
+    return array_merge($pool[$idx], ['_idx' => $idx, '_total' => count($pool), '_proxy_ip' => $pool[$idx]['host'] . ':' . $pool[$idx]['port'], '_mode' => $mode]);
 }
 
 function curl_apply_proxy_config($ch, array $proxy, string $proxyType = 'http'): void
 {
-    $host = $proxy['host'];
-    curl_setopt($ch, CURLOPT_PROXY, $host . ':' . $proxy['port']);
+    curl_setopt($ch, CURLOPT_PROXY, $proxy['host'] . ':' . $proxy['port']);
     $map = ['http' => CURLPROXY_HTTP, 'https' => CURLPROXY_HTTPS, 'socks4' => CURLPROXY_SOCKS4, 'socks5' => CURLPROXY_SOCKS5];
     curl_setopt($ch, CURLOPT_PROXYTYPE, $map[strtolower($proxyType)] ?? CURLPROXY_HTTP);
     if (!empty($proxy['user'])) curl_setopt($ch, CURLOPT_PROXYUSERPWD, $proxy['user'] . ':' . $proxy['pass']);
@@ -588,46 +557,15 @@ function curl_get(string $url, array $settings, bool $forceProxy = false, ?array
     if (!extension_loaded('curl')) throw new RuntimeException('服务器未启用 PHP cURL 扩展。');
     $timeout = max(5, min(60, (int)$settings['timeout']));
     $ch = curl_init($url);
-    
-    $acceptEncoding = ['gzip', 'deflate', 'br'];
-    shuffle($acceptEncoding);
-    
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 4,
         CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
         CURLOPT_CONNECTTIMEOUT => $timeout, CURLOPT_TIMEOUT => $timeout, CURLOPT_ENCODING => '',
         CURLOPT_HTTPHEADER => [
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
-            'Accept-Encoding: ' . implode(', ', $acceptEncoding),
-            'Cache-Control: max-age=0',
-            'Sec-Ch-Ua: "Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-            'Sec-Ch-Ua-Mobile: ?0',
-            'Sec-Ch-Ua-Platform: "Windows"',
-            'Sec-Ch-Ua-Full-Version: "126.0.6478.182"',
-            'Sec-Ch-Ua-Full-Version-List: "Not/A)Brand";v="8.0.0.0", "Chromium";v="126.0.6478.182", "Google Chrome";v="126.0.6478.182"',
-            'Sec-Ch-Ua-Arch: "x86"',
-            'Sec-Ch-Ua-Model: ""',
-            'Sec-Ch-Ua-Bitness: "64"',
-            'Sec-Ch-Ua-Wow64: "false"',
-            'Sec-Fetch-Dest: document',
-            'Sec-Fetch-Mode: navigate',
-            'Sec-Fetch-Site: none',
-            'Sec-Fetch-User: ?1',
-            'Sec-Fetch-Priority: high',
-            'Upgrade-Insecure-Requests: 1',
-            'Connection: keep-alive',
-            'Referer: https://www.google.com/',
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language: zh-CN,zh;q=0.9,en;q=0.7',
         ],
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        CURLOPT_COOKIEJAR => '/tmp/google_cookies.txt',
-        CURLOPT_COOKIEFILE => '/tmp/google_cookies.txt',
-        CURLOPT_TCP_NODELAY => true,
-        CURLOPT_FRESH_CONNECT => false,
-        CURLOPT_FORBID_REUSE => false,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
-        CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
     ]);
     if ($forceProxy && $proxyCfg) {
         curl_apply_proxy_config($ch, $proxyCfg, (string)($settings['proxy_type'] ?? 'http'));
@@ -696,254 +634,6 @@ function ddg_search_url(string $query, int $page = 1): string
 {
     // DDG HTML version doesn't support real pagination - always page 1
     return 'https://html.duckduckgo.com/html/?' . http_build_query(['q' => $query]);
-}
-
-function baidu_search_url(string $query, int $page = 1): string
-{
-    return 'https://www.baidu.com/s?' . http_build_query([
-        'wd' => $query, 'pn' => ($page - 1) * 10, 'rn' => 10
-    ]);
-}
-
-function extract_baidu_results(string $html): array
-{
-    libxml_use_internal_errors(true);
-    $doc = new DOMDocument();
-    $doc->loadHTML('<?xml encoding="utf-8" ?>' . $html);
-    $xpath = new DOMXPath($doc);
-    $items = []; $seen = [];
-    
-    // Try to find Baidu search results - Baidu uses various selectors
-    $resultSelectors = [
-        '//div[contains(@class,"result")]//h3/a',
-        '//div[contains(@class,"c-container")]//h3/a',
-        '//h3[contains(@class,"t")]/a'
-    ];
-    
-    foreach ($resultSelectors as $selector) {
-        $links = $xpath->query($selector);
-        if ($links->length > 0) {
-            foreach ($links as $a) {
-                $href = $a->getAttribute('href');
-                // Baidu uses redirect links, try to follow or just use as is
-                if (!filter_var($href, FILTER_VALIDATE_URL)) continue;
-                $host = parse_url($href, PHP_URL_HOST) ?: '';
-                if (str_contains($host, 'baidu.')) continue;
-                
-                $title = trim($a->textContent);
-                if ($title === '' || isset($seen[$href])) continue;
-                $seen[$href] = true;
-                
-                if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200) . '…';
-                
-                // Try to find snippet
-                $snippet = '';
-                $div = $a;
-                for ($i = 0; $i < 6; $i++) { $div = $div->parentNode; if (!$div) break; }
-                if ($div) {
-                    $snippet = trim(preg_replace('/\s+/u', ' ', $div->textContent));
-                    $snippet = str_replace($title, '', $snippet);
-                    if (mb_strlen($snippet) > 240) $snippet = mb_substr($snippet, 0, 240) . '…';
-                }
-                
-                $items[] = [
-                    'title' => $title, 'url' => $href,
-                    'open_url' => redirect_url_for($href, ''),
-                    'display_url' => preg_replace('#^https?://#', '', $href),
-                    'snippet' => $snippet,
-                ];
-                if (count($items) >= 10) break;
-            }
-            if (count($items) > 0) break;
-        }
-    }
-    
-    libxml_clear_errors();
-    return $items;
-}
-
-function yahoo_search_url(string $query, int $page = 1): string
-{
-    return 'https://search.yahoo.com/search?' . http_build_query([
-        'p' => $query, 'b' => ($page - 1) * 10 + 1, 'pz' => 10
-    ]);
-}
-
-function extract_yahoo_results(string $html): array
-{
-    libxml_use_internal_errors(true);
-    $doc = new DOMDocument();
-    $doc->loadHTML('<?xml encoding="utf-8" ?>' . $html);
-    $xpath = new DOMXPath($doc);
-    $items = []; $seen = [];
-    
-    foreach ($xpath->query('//div[contains(@class,"algo")]//h3/a | //li[contains(@class,"da-alg")]//h3/a') as $a) {
-        $href = $a->getAttribute('href');
-        if (!filter_var($href, FILTER_VALIDATE_URL)) continue;
-        $host = parse_url($href, PHP_URL_HOST) ?: '';
-        if (str_contains($host, 'yahoo.')) continue;
-        $title = trim($a->textContent);
-        if ($title === '' || isset($seen[$href])) continue;
-        $seen[$href] = true;
-        if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200) . '…';
-        $snippet = '';
-        $parent = $a->parentNode;
-        while ($parent) {
-            foreach ($parent->childNodes as $child) {
-                if ($child->nodeType == XML_TEXT_NODE && trim($child->textContent) !== '') {
-                    $snippet = trim($child->textContent);
-                    break 2;
-                }
-                if ($child instanceof DOMElement && in_array($child->tagName, ['p', 'div', 'span'])) {
-                    $text = trim($child->textContent);
-                    if ($text !== '' && mb_strlen($text) > 20) {
-                        $snippet = $text;
-                        break 2;
-                    }
-                }
-            }
-            $parent = $parent->parentNode;
-        }
-        if ($snippet && mb_strlen($snippet) > 240) $snippet = mb_substr($snippet, 0, 240) . '…';
-        $items[] = [
-            'title' => $title, 'url' => $href,
-            'open_url' => redirect_url_for($href, ''),
-            'display_url' => preg_replace('#^https?://#', '', $href),
-            'snippet' => $snippet,
-        ];
-        if (count($items) >= 10) break;
-    }
-    
-    foreach ($xpath->query('//div[contains(@class,"compTitle")]//a') as $a) {
-        $href = $a->getAttribute('href');
-        if (!filter_var($href, FILTER_VALIDATE_URL)) continue;
-        $host = parse_url($href, PHP_URL_HOST) ?: '';
-        $title = trim($a->textContent);
-        if ($title === '' || isset($seen[$href])) continue;
-        $seen[$href] = true;
-        if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200) . '…';
-        $snippet = '';
-        $parent = $a->parentNode;
-        while ($parent) {
-            foreach ($parent->childNodes as $child) {
-                if ($child->nodeType == XML_TEXT_NODE && trim($child->textContent) !== '') {
-                    $snippet = trim($child->textContent);
-                    break 2;
-                }
-                if ($child instanceof DOMElement && in_array($child->tagName, ['p', 'div', 'span'])) {
-                    $text = trim($child->textContent);
-                    if ($text !== '' && mb_strlen($text) > 20) {
-                        $snippet = $text;
-                        break 2;
-                    }
-                }
-            }
-            $parent = $parent->parentNode;
-        }
-        if ($snippet && mb_strlen($snippet) > 240) $snippet = mb_substr($snippet, 0, 240) . '…';
-        $items[] = [
-            'title' => $title, 'url' => $href,
-            'open_url' => redirect_url_for($href, ''),
-            'display_url' => preg_replace('#^https?://#', '', $href),
-            'snippet' => $snippet,
-        ];
-        if (count($items) >= 10) break;
-    }
-    
-    libxml_clear_errors();
-    return $items;
-}
-
-function sogou_search_url(string $query, int $page = 1): string
-{
-    return 'https://www.sogou.com/web?' . http_build_query([
-        'query' => $query, 'page' => $page, 'ie' => 'utf8'
-    ]);
-}
-
-function extract_sogou_results(string $html): array
-{
-    libxml_use_internal_errors(true);
-    $doc = new DOMDocument();
-    $doc->loadHTML('<?xml encoding="utf-8" ?>' . $html);
-    $xpath = new DOMXPath($doc);
-    $items = []; $seen = [];
-    
-    foreach ($xpath->query('//div[contains(@class,"vrwrap")]//h3/a | //div[contains(@class,"rb")]//h3/a | //div[contains(@class,"result")]//h3/a') as $a) {
-        $href = $a->getAttribute('href');
-        if (!filter_var($href, FILTER_VALIDATE_URL)) continue;
-        $host = parse_url($href, PHP_URL_HOST) ?: '';
-        if (str_contains($host, 'sogou.')) continue;
-        $title = trim($a->textContent);
-        if ($title === '' || isset($seen[$href])) continue;
-        $seen[$href] = true;
-        if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200) . '…';
-        $snippet = '';
-        $parent = $a->parentNode;
-        while ($parent) {
-            foreach ($parent->childNodes as $child) {
-                if ($child->nodeType == XML_TEXT_NODE && trim($child->textContent) !== '') {
-                    $snippet = trim($child->textContent);
-                    break 2;
-                }
-                if ($child instanceof DOMElement && in_array($child->tagName, ['p', 'div', 'span'])) {
-                    $text = trim($child->textContent);
-                    if ($text !== '' && mb_strlen($text) > 20) {
-                        $snippet = $text;
-                        break 2;
-                    }
-                }
-            }
-            $parent = $parent->parentNode;
-        }
-        if ($snippet && mb_strlen($snippet) > 240) $snippet = mb_substr($snippet, 0, 240) . '…';
-        $items[] = [
-            'title' => $title, 'url' => $href,
-            'open_url' => redirect_url_for($href, ''),
-            'display_url' => preg_replace('#^https?://#', '', $href),
-            'snippet' => $snippet,
-        ];
-        if (count($items) >= 10) break;
-    }
-    
-    foreach ($xpath->query('//div[contains(@class,"box-v2")]//a') as $a) {
-        $href = $a->getAttribute('href');
-        if (!filter_var($href, FILTER_VALIDATE_URL)) continue;
-        $host = parse_url($href, PHP_URL_HOST) ?: '';
-        $title = trim($a->textContent);
-        if ($title === '' || isset($seen[$href])) continue;
-        $seen[$href] = true;
-        if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200) . '…';
-        $snippet = '';
-        $parent = $a->parentNode;
-        while ($parent) {
-            foreach ($parent->childNodes as $child) {
-                if ($child->nodeType == XML_TEXT_NODE && trim($child->textContent) !== '') {
-                    $snippet = trim($child->textContent);
-                    break 2;
-                }
-                if ($child instanceof DOMElement && in_array($child->tagName, ['p', 'div', 'span'])) {
-                    $text = trim($child->textContent);
-                    if ($text !== '' && mb_strlen($text) > 20) {
-                        $snippet = $text;
-                        break 2;
-                    }
-                }
-            }
-            $parent = $parent->parentNode;
-        }
-        if ($snippet && mb_strlen($snippet) > 240) $snippet = mb_substr($snippet, 0, 240) . '…';
-        $items[] = [
-            'title' => $title, 'url' => $href,
-            'open_url' => redirect_url_for($href, ''),
-            'display_url' => preg_replace('#^https?://#', '', $href),
-            'snippet' => $snippet,
-        ];
-        if (count($items) >= 10) break;
-    }
-    
-    libxml_clear_errors();
-    return $items;
 }
 
 function extract_startpage_results(string $html): array
@@ -1109,7 +799,6 @@ function selected_search_source(array $settings): string
     if ($host === '127.0.0.1' || $host === 'localhost') return 'searxng';
     if (str_contains($host, 'duckduckgo.')) return 'duckduckgo';
     if (str_contains($host, 'startpage.')) return 'startpage';
-    if (str_contains($host, 'baidu.')) return 'baidu';
     return 'google';
 }
 
@@ -1125,27 +814,12 @@ function html_search(string $source, string $query, array $settings, int $page):
         if (is_resource_exhausted_response($resp['body'], $resp['status']) || is_bot_challenge_response($resp['body'])) return [];
         return extract_startpage_results($resp['body']);
     }
-    if ($source === 'baidu') {
-        $resp = curl_get(baidu_search_url($query, $page), $settings);
-        if (is_resource_exhausted_response($resp['body'], $resp['status']) || is_bot_challenge_response($resp['body'])) return [];
-        return extract_baidu_results($resp['body']);
-    }
-    if ($source === 'yahoo') {
-        $resp = curl_get(yahoo_search_url($query, $page), $settings);
-        if (is_resource_exhausted_response($resp['body'], $resp['status']) || is_bot_challenge_response($resp['body'])) return [];
-        return extract_yahoo_results($resp['body']);
-    }
-    if ($source === 'sogou') {
-        $resp = curl_get(sogou_search_url($query, $page), $settings);
-        if (is_resource_exhausted_response($resp['body'], $resp['status']) || is_bot_challenge_response($resp['body'])) return [];
-        return extract_sogou_results($resp['body']);
-    }
     $resp = curl_get(google_search_url($query, $settings, $page), $settings);
     if (is_resource_exhausted_response($resp['body'], $resp['status']) || is_bot_challenge_response($resp['body'])) return [];
     return extract_google_results($resp['body'], bool_setting($settings, 'page_proxy_enabled'), $query);
 }
 
-function perform_search(string $query, array $settings, int $page = 1, ?string $engine = null): array
+function perform_search(string $query, array $settings, int $page = 1): array
 {
     if (!bool_setting($settings, 'search_enabled')) throw new RuntimeException('搜索服务当前已关闭。');
     if (mb_strlen($query) < 1 || mb_strlen($query) > 160) throw new InvalidArgumentException('请输入 1-160 个字符的关键词。');
@@ -1175,79 +849,36 @@ function perform_search(string $query, array $settings, int $page = 1, ?string $
         }
     } catch (Throwable $e) {}
 
-    // 定义要尝试的搜索引擎列表
-    $searchEngines = ['duckduckgo', 'startpage', 'google', 'baidu', 'yahoo', 'sogou'];
-    
-    // 优先级：URL参数 > 后台设置 > google_domain
-    $primarySource = 'duckduckgo';
-    $forceDirect = false; // 是否强制不使用代理
-    $forceProxyOnly = false; // 是否强制只使用代理
-    
-    if ($engine && in_array($engine, $searchEngines, true)) {
-        $primarySource = $engine;
-        if ($engine === 'google') {
-            $forceProxyOnly = true; // Google通常需要代理，优先尝试代理
-        }
-    } elseif (!empty($settings['search_engine'])) {
-        if ($settings['search_engine'] === 'direct') {
-            $primarySource = 'google';
-            $forceDirect = true;
-        } elseif (in_array($settings['search_engine'], $searchEngines, true)) {
-            $primarySource = $settings['search_engine'];
-            if ($settings['search_engine'] === 'google') {
-                $forceProxyOnly = true; // Google通常需要代理
-            }
-        }
+    // 根据 google_domain 设置选择搜索引擎
+    $domain = (string)($settings['google_domain'] ?? '');
+    if (str_contains($domain, 'duckduckgo')) {
+        $source = 'duckduckgo';
+    } elseif (str_contains($domain, 'startpage')) {
+        $source = 'startpage';
     } else {
-        $domain = (string)($settings['google_domain'] ?? '');
-        if (str_contains($domain, 'duckduckgo')) {
-            $primarySource = 'duckduckgo';
-        } elseif (str_contains($domain, 'startpage')) {
-            $primarySource = 'startpage';
-        } elseif (str_contains($domain, 'baidu')) {
-            $primarySource = 'baidu';
-        } else {
-            $primarySource = 'google';
-            $forceProxyOnly = true;
-        }
+        $source = 'google';
     }
-    
-    // 把首选引擎放到第一位
-    $searchEngines = array_diff($searchEngines, [$primarySource]);
-    array_unshift($searchEngines, $primarySource);
-    
-    $proxyEnabled = bool_setting($settings, 'proxy_enabled') && !$forceDirect;
-    $directSettings = $settings;
-    $directSettings['proxy_enabled'] = '0';
-    
-    // 如果首选是Google且有代理，先尝试通过代理，失败后再尝试直连
-    if (($primarySource === 'google' || $forceProxyOnly) && $proxyEnabled && $proxyConfig !== null) {
-        foreach ($searchEngines as $source) {
-            try {
-                $results = html_search($source, $query, $settings, $page);
-                if (!empty($results)) {
-                    log_search($query, count($results), 'ok', $logRoute . $source, $proxyIp, $source);
-                    return ['results' => $results, 'page' => $page, 'via_proxy' => true, 'source' => $source];
-                }
-            } catch (Throwable $e) {
-                error_log("Search with $source (proxy) failed: " . $e->getMessage());
-            }
-        }
-    }
-    
-    // 尝试直接连接（无代理）
-    foreach ($searchEngines as $source) {
+    $proxyEnabled = bool_setting($settings, 'proxy_enabled');
+    if ($proxyEnabled && $proxyConfig !== null) {
         try {
-            $results = html_search($source, $query, $directSettings, $page);
+            $results = html_search($source, $query, $settings, $page);
             if (!empty($results)) {
-                log_search($query, count($results), 'ok', $logRoute . $source, '', $source);
-                return ['results' => $results, 'page' => $page, 'via_proxy' => false, 'source' => $source];
+                log_search($query, count($results), 'ok', $logRoute . $source, $proxyIp, $source);
+                return ['results' => $results, 'page' => $page, 'via_proxy' => true, 'source' => $source];
             }
-        } catch (Throwable $e) {
-            error_log("Search with $source (direct) failed: " . $e->getMessage());
-        }
+        } catch (Throwable $e) {}
     }
 
-    log_search($query, 0, 'resource_exhausted', $logRoute . implode(',', $searchEngines), $proxyIp, '所有搜索引擎均不可用');
+    $directSettings = $settings;
+    $directSettings['proxy_enabled'] = '0';
+    try {
+        $results = html_search($source, $query, $directSettings, $page);
+        if (!empty($results)) {
+            log_search($query, count($results), 'ok', $logRoute . $source, '', $source);
+            return ['results' => $results, 'page' => $page, 'via_proxy' => $proxyEnabled, 'source' => $source];
+        }
+    } catch (Throwable $e) {}
+
+    log_search($query, 0, 'resource_exhausted', $logRoute . 'searxng,' . $source, $proxyIp, '所有搜索引擎均不可用');
     return ['results' => [], 'page' => $page, 'resource_exhausted' => true, 'message' => '因资源耗尽，请稍等再访问'];
 }
