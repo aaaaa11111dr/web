@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>内部搜索系统 - 预览</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <style>
+        :root {
+            --bg: #ffffff;
+            --soft-bg: #f8fafd;
+            --card: #ffffff;
+            --text: #202124;
+            --muted: #5f6368;
+            --line: #dfe1e5;
+            --line-soft: #edf0f3;
+            --primary: #2563eb;
+            --primary-strong: #1d4ed8;
+            --primary-soft: #eef4ff;
+            --brand-blue: #2563eb;
+            --brand-red: #ef4444;
+            --brand-yellow: #f59e0b;
+            --brand-green: #16a34a;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: #fff;
+            color: var(--text);
+        }
+        .preview-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .preview-info h1 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+        }
+        .preview-info p {
+            margin: 0;
+            opacity: 0.9;
+        }
+        .preview-container {
+            max-width: 1120px;
+            margin: 40px auto;
+            padding: 0 32px;
+        }
+        .preview-section {
+            background: var(--card);
+            border: 1px solid var(--line-soft);
+            border-radius: 22px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 24px rgba(60, 64, 67, .08);
+        }
+        .preview-section h2 {
+            margin: 0 0 20px 0;
+            color: var(--text);
+            font-size: 20px;
+        }
+        .demo-search {
+            width: min(584px, 100%);
+            min-height: 50px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            gap: 0;
+            padding: 0 8px 0 18px;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 999px;
+        }
+        .demo-search input {
+            min-width: 0;
+            height: 48px;
+            border: 0;
+            outline: 0;
+            padding: 0 10px 0 0;
+            font-size: 17px;
+            background: transparent;
+            color: var(--text);
+        }
+        .demo-search button {
+            width: 42px;
+            min-width: 42px;
+            min-height: 42px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--primary);
+            display: inline-grid;
+            place-items: center;
+            cursor: pointer;
+        }
+        .brand-demo {
+            text-align: center;
+            margin: 40px 0;
+        }
+        .brand-text {
+            display: inline-flex;
+            align-items: baseline;
+            font-size: 78px;
+            font-weight: 500;
+            letter-spacing: -.055em;
+        }
+        .brand-c-blue { color: var(--brand-blue); }
+        .brand-c-red { color: var(--brand-red); }
+        .brand-c-yellow { color: var(--brand-yellow); }
+        .brand-c-green { color: var(--brand-green); }
+        .demo-result {
+            margin-top: 20px;
+        }
+        .demo-result-item {
+            padding: 15px 0;
+            border-bottom: 1px solid var(--line-soft);
+        }
+        .demo-result-title {
+            color: var(--primary);
+            font-size: 20px;
+            font-weight: 400;
+            text-decoration: none;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .demo-result-url {
+            color: #188038;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        .demo-result-snippet {
+            color: #4d5156;
+            font-size: 14px;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+        .feature-card {
+            background: var(--soft-bg);
+            padding: 20px;
+            border-radius: 16px;
+            border: 1px solid var(--line-soft);
+        }
+        .feature-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+        .feature-card p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="preview-info">
+        <h1>🎯 内部搜索系统</h1>
+        <p>这是一个功能强大的内部搜索系统，支持多种搜索引擎集成</p>
+    </div>
+    
+    <div class="preview-container">
+        <div class="preview-section">
+            <h2>🏠 首页界面</h2>
+            <div class="brand-demo">
+                <div class="brand-text">
+                    <span class="brand-c-blue">S</span><span class="brand-c-red">e</span><span class="brand-c-yellow">a</span><span class="brand-c-blue">r</span><span class="brand-c-green">c</span><span class="brand-c-red">h</span>
+                </div>
+            </div>
+            <div class="demo-search">
+                <input type="text" placeholder="输入关键词搜索" readonly>
+                <button>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="m21 21-4.35-4.35"/>
+                    </svg>
+                </button>
+            </div>
+            <p style="text-align: center; color: var(--muted); margin-top: 20px;">
+                仅限内部人员使用
+            </p>
+        </div>
+        
+        <div class="preview-section">
+            <h2>🔍 搜索结果界面</h2>
+            <div class="demo-result">
+                <div class="demo-result-item">
+                    <a href="#" class="demo-result-title">什么是搜索引擎？- 维基百科</a>
+                    <div class="demo-result-url">zh.wikipedia.org</div>
+                    <p class="demo-result-snippet">搜索引擎是指根据一定的策略、运用特定的计算机程序从互联网上搜集信息，在对信息进行组织和处理后，为用户提供检索服务，将用户检索相关的信息展示给用户的系统。</p>
+                </div>
+                <div class="demo-result-item">
+                    <a href="#" class="demo-result-title">搜索引擎工作原理详解</a>
+                    <div class="demo-result-url">www.example.com</div>
+                    <p class="demo-result-snippet">本文详细介绍了搜索引擎的工作原理，包括爬虫、索引、排序等关键技术，帮助你更好地理解搜索过程。</p>
+                </div>
+                <div class="demo-result-item">
+                    <a href="#" class="demo-result-title">内部搜索系统使用指南</a>
+                    <div class="demo-result-url">docs.internal</div>
+                    <p class="demo-result-snippet">欢迎使用内部搜索系统，本指南将帮助您快速上手，掌握高效搜索的技巧。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="preview-section">
+            <h2>✨ 主要功能</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h3>🔍 多搜索引擎支持</h3>
+                    <p>支持 Google、DuckDuckGo、Baidu、StartPage 等多种搜索引擎</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🔒 访问控制</h3>
+                    <p>支持 IP 白名单和密码保护，确保系统安全</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📊 搜索统计</h3>
+                    <p>完整的搜索日志和数据分析功能</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🎯 关键词拦截</h3>
+                    <p>可配置非法关键词拦截功能</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🔄 代理支持</h3>
+                    <p>支持代理池配置和自动轮换</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📱 响应式设计</h3>
+                    <p>完美适配各种设备屏幕</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="preview-section">
+            <h2>🚀 如何部署</h2>
+            <p>要完整运行此系统，请按照以下步骤：</p>
+            <ol style="color: var(--muted);">
+                <li>在云服务器上安装 Docker 和 Docker Compose</li>
+                <li>上传项目文件到服务器</li>
+                <li>运行 <code style="background: var(--primary-soft); padding: 2px 8px; border-radius: 4px;">docker-compose up -d</code></li>
+                <li>访问 <code style="background: var(--primary-soft); padding: 2px 8px; border-radius: 4px;">http://your-server-ip:8000</code></li>
+                <li>默认管理账号：<strong>admin / Admin1234</strong></li>
+            </ol>
+            <p style="color: var(--muted);">详细说明请查看 <code>CLOUD_DEPLOYMENT.md</code> 文件</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -3,13 +3,115 @@ require __DIR__ . '/app/bootstrap.php';
 require_install();
 $error = ''; $ok = ''; $settings = get_settings();
 
-// 直接设置管理员会话，跳过登录
-if (!is_admin()) {
-    $_SESSION['admin_id'] = 1;
-    $_SESSION['admin_user'] = 'admin';
+if (isset($_GET['logout'])) { session_destroy(); redirect('/goolehome.php'); }
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login') {
+    $username = trim((string)($_POST['username'] ?? ''));
+    $password = (string)($_POST['password'] ?? '');
+    $stmt = pdo()->prepare('SELECT * FROM `admins` WHERE `username` = ? LIMIT 1');
+    $stmt->execute([$username]);
+    $admin = $stmt->fetch();
+    if ($admin && password_verify($password, $admin['password_hash'])) {
+        $_SESSION['admin_id'] = (int)$admin['id'];
+        $_SESSION['admin_user'] = $admin['username'];
+        redirect('/goolehome.php');
+    } else {
+        $error = '用户名或密码错误';
+    }
 }
 
-if (isset($_GET['logout'])) { session_destroy(); redirect('/goolehome.php'); }
+if (!is_admin()) {
+?>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>管理员登录 - <?= e(APP_NAME) ?></title>
+    <link rel="stylesheet" href="/assets/style.css?v=2026051401">
+    <style>
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .login-card {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 400px;
+            margin: 20px;
+        }
+        .login-title {
+            text-align: center;
+            font-size: 28px;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .login-form input {
+            padding: 14px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        .login-form input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .login-btn {
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .login-error {
+            color: #b91c1c;
+            text-align: center;
+            padding: 10px;
+            background: #fee2e2;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body class="login-container">
+    <div class="login-card">
+        <h1 class="login-title">🔐 管理员登录</h1>
+        <?php if ($error): ?>
+        <div class="login-error"><?= e($error) ?></div>
+        <?php endif; ?>
+        <form method="post" class="login-form">
+            <input type="hidden" name="action" value="login">
+            <input type="text" name="username" placeholder="管理员账号" required autofocus value="admin">
+            <input type="password" name="password" placeholder="密码" required>
+            <button type="submit" class="login-btn">登 录</button>
+        </form>
+    </div>
+</body>
+</html>
+<?php
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     check_csrf(); $action = $_POST['action'] ?? '';
     try {
@@ -25,6 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'result_description' => trim((string)($_POST['result_description'] ?? '')),
                 'result_keywords' => trim((string)($_POST['result_keywords'] ?? '')),
                 'search_enabled' => !empty($_POST['search_enabled']) ? '1' : '0',
+                'search_engine' => in_array($_POST['search_engine'] ?? 'google', ['direct', 'google', 'duckduckgo', 'baidu', 'yahoo', 'sogou', 'startpage'], true) ? $_POST['search_engine'] : 'google',
                 'google_domain' => normalize_google_domain((string)$_POST['google_domain']),
                 'timeout' => (string)min(60, max(5, (int)$_POST['timeout'])),
                 'rate_limit_seconds' => (string)min(30, max(0, (int)$_POST['rate_limit_seconds'])),
@@ -121,8 +224,8 @@ $poolKeys = [
   <div class="metric-grid">
     <article class="metric-card"><span>搜索</span><strong><?= bool_setting($settings,'search_enabled')?'启用':'关闭' ?></strong></article>
     <article class="metric-card"><span>代理</span><strong><?= bool_setting($settings,'proxy_enabled')?'启用':'关闭' ?></strong></article>
+    <article class="metric-card"><span>搜索引擎</span><strong><?= e($settings['search_engine'] ?? 'google') ?></strong></article>
     <article class="metric-card"><span>今日搜索</span><strong><?= e((string)($stats['today_searches'] ?? 0)) ?></strong></article>
-    <article class="metric-card"><span>今日访客</span><strong><?= e((string)($stats['today_search_ips'] ?? 0)) ?></strong></article>
   </div>
 </div>
 
@@ -142,9 +245,9 @@ $poolKeys = [
   </div>
 </div>
 
-<div class="admin-page" id="page-search"><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="search-settings"><div class="panel"><div class="panel-head"><div><h2>站点信息 / SEO 设置</h2><p class="muted">这里统一管理前台显示文字和页面 TDK；可用变量：{site_name}=站点名称，{q}=搜索关键词。</p></div><label class="switch"><input type="checkbox" name="search_enabled" <?= bool_setting($settings,'search_enabled')?'checked':'' ?>><span></span>启用搜索</label></div><div class="form-grid"><div class="form-section-title span-2"><strong>基础展示</strong><small>控制首页品牌名、搜索框下方提示和页脚文字。</small></div><label>站点名称<input name="site_name" value="<?= e($settings['site_name']) ?>" placeholder="Search"></label><label>首页提示文字<input name="site_notice" value="<?= e($settings['site_notice']) ?>" placeholder="仅限内部人员使用。"></label><label class="span-2">底部文字<input name="footer_notice" value="<?= e($settings['footer_notice']) ?>" placeholder="请用于正规用途"></label><div class="form-section-title span-2"><strong>首页 TDK</strong><small>未搜索时首页输出的标题、描述和关键词。</small></div><label class="span-2">首页 Title<input name="home_title" value="<?= e($settings['home_title']) ?>" placeholder="{site_name}"></label><label class="span-2">首页 Description<textarea name="home_description" rows="2" placeholder="内部搜索系统"><?= e($settings['home_description']) ?></textarea></label><label class="span-2">首页 Keywords<input name="home_keywords" value="<?= e($settings['home_keywords']) ?>" placeholder="搜索,内部搜索"></label><div class="form-section-title span-2"><strong>搜索结果页 TDK</strong><small>搜索结果页会把 {q} 自动替换成用户搜索词。</small></div><label class="span-2">结果页 Title 模板<input name="result_title" value="<?= e($settings['result_title']) ?>" placeholder="{q} - {site_name}"></label><label class="span-2">结果页 Description 模板<textarea name="result_description" rows="2" placeholder="{q} 的搜索结果"><?= e($settings['result_description']) ?></textarea></label><label class="span-2">结果页 Keywords 模板<input name="result_keywords" value="<?= e($settings['result_keywords']) ?>" placeholder="{q},{site_name}"></label><div class="form-section-title span-2"><strong>搜索参数</strong><small>超时时间、频率限制等高级设置。</small></div><label>超时时间(秒)<input type="number" name="timeout" min="5" max="60" value="<?= e($settings['timeout']) ?>"></label><label>频率限制(秒)<input type="number" name="rate_limit_seconds" min="0" max="30" value="<?= e($settings['rate_limit_seconds']) ?>"></label><label>翻页倒计时(秒)<input type="number" name="pager_countdown_seconds" min="1" max="300" value="<?= e($settings['pager_countdown_seconds']) ?>"></label><label>跳转倒计时(秒)<input type="number" name="redirect_countdown_seconds" min="1" max="300" value="<?= e($settings['redirect_countdown_seconds']) ?>"></label><label class="span-2">搜索引擎域名<input name="google_domain" value="<?= e($settings['google_domain']) ?>" placeholder="https://www.google.com"><small style="color:#0066cc">💡 支持：Google(默认)、DuckDuckGo(https://duckduckgo.com)、StartPage(https://www.startpage.com)、本地Searxng(http://127.0.0.1:8888)</small></label></div><div class="panel-foot"><button type="submit">保存</button></div></div></form></div>
+<div class="admin-page" id="page-search"><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="search-settings"><div class="panel"><div class="panel-head"><div><h2>搜索引擎设置</h2><p class="muted">选择默认搜索引擎并配置相关参数。</p></div><label class="switch"><input type="checkbox" name="search_enabled" <?= bool_setting($settings,'search_enabled')?'checked':'' ?>><span></span>启用搜索</label></div><div class="form-grid"><label class="span-2">默认搜索引擎<select name="search_engine" style="padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:100%"><option value="direct" <?= ($settings['search_engine'] ?? '') === 'direct' ? 'selected' : '' ?>>🔒 直连（不使用代理）</option><option value="google" <?= ($settings['search_engine'] ?? '') === 'google' ? 'selected' : '' ?>>Google（需要代理）</option><option value="duckduckgo" <?= ($settings['search_engine'] ?? '') === 'duckduckgo' ? 'selected' : '' ?>>DuckDuckGo（无需代理）</option><option value="baidu" <?= ($settings['search_engine'] ?? '') === 'baidu' ? 'selected' : '' ?>>百度（国内推荐）</option><option value="yahoo" <?= ($settings['search_engine'] ?? '') === 'yahoo' ? 'selected' : '' ?>>Yahoo（无需代理）</option><option value="sogou" <?= ($settings['search_engine'] ?? '') === 'sogou' ? 'selected' : '' ?>>搜狗（国内推荐）</option><option value="startpage" <?= ($settings['search_engine'] ?? '') === 'startpage' ? 'selected' : '' ?>>Startpage（隐私搜索）</option></select><small style="color:#666">直连=不使用代理，直接搜索；适合国内百度/DuckDuckGo/搜狗</small></label><label class="span-2">Google 域名<select name="google_domain" style="padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:100%"><option value="https://www.google.com" <?= ($settings['google_domain'] ?? '') === 'https://www.google.com' ? 'selected' : '' ?>>google.com（全球）</option><option value="https://www.google.com.hk" <?= ($settings['google_domain'] ?? '') === 'https://www.google.com.hk' ? 'selected' : '' ?>>google.com.hk（香港）</option><option value="https://www.google.co.jp" <?= ($settings['google_domain'] ?? '') === 'https://www.google.co.jp' ? 'selected' : '' ?>>google.co.jp（日本）</option><option value="https://www.google.com.tw" <?= ($settings['google_domain'] ?? '') === 'https://www.google.com.tw' ? 'selected' : '' ?>>google.com.tw（台湾）</option></select><small style="color:#666">当选择Google搜索引擎时使用的域名</small></label></div></div><div class="panel"><div class="panel-head"><div><h2>站点信息 / SEO 设置</h2><p class="muted">这里统一管理前台显示文字和页面 TDK；可用变量：{site_name}=站点名称，{q}=搜索关键词。</p></div></div><div class="form-grid"><div class="form-section-title span-2"><strong>基础展示</strong><small>控制首页品牌名、搜索框下方提示和页脚文字。</small></div><label>站点名称<input name="site_name" value="<?= e($settings['site_name']) ?>" placeholder="Search"></label><label>首页提示文字<input name="site_notice" value="<?= e($settings['site_notice']) ?>" placeholder="仅限内部人员使用。"></label><label class="span-2">底部文字<input name="footer_notice" value="<?= e($settings['footer_notice']) ?>" placeholder="请用于正规用途"></label><div class="form-section-title span-2"><strong>首页 TDK</strong><small>未搜索时首页输出的标题、描述和关键词。</small></div><label class="span-2">首页 Title<input name="home_title" value="<?= e($settings['home_title']) ?>" placeholder="{site_name}"></label><label class="span-2">首页 Description<textarea name="home_description" rows="2" placeholder="内部搜索系统"><?= e($settings['home_description']) ?></textarea></label><label class="span-2">首页 Keywords<input name="home_keywords" value="<?= e($settings['home_keywords']) ?>" placeholder="搜索,内部搜索"></label><div class="form-section-title span-2"><strong>搜索结果页 TDK</strong><small>搜索结果页会把 {q} 自动替换成用户搜索词。</small></div><label class="span-2">结果页 Title 模板<input name="result_title" value="<?= e($settings['result_title']) ?>" placeholder="{q} - {site_name}"></label><label class="span-2">结果页 Description 模板<textarea name="result_description" rows="2" placeholder="{q} 的搜索结果"><?= e($settings['result_description']) ?></textarea></label><label class="span-2">结果页 Keywords 模板<input name="result_keywords" value="<?= e($settings['result_keywords']) ?>" placeholder="{q},{site_name}"></label><div class="form-section-title span-2"><strong>性能设置</strong></div><label>请求超时(秒)<input type="number" name="timeout" min="5" max="60" value="<?= e($settings['timeout']) ?>"></label><label>搜索间隔(秒)<input type="number" name="rate_limit_seconds" min="0" max="30" value="<?= e($settings['rate_limit_seconds']) ?>"></label><label>翻页等待(秒)<input type="number" name="pager_countdown_seconds" min="1" max="300" value="<?= e($settings['pager_countdown_seconds']) ?>"></label><label>跳转等待(秒)<input type="number" name="redirect_countdown_seconds" min="1" max="300" value="<?= e($settings['redirect_countdown_seconds']) ?>"></label></div><div class="panel-foot"><button type="submit">保存配置</button></div></div></form></div>
 
-<div class="admin-page" id="page-proxy"><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="proxy-settings"><div class="panel"><div class="panel-head"><h2>代理配置</h2><div class="switches"><label class="switch"><input type="checkbox" name="proxy_enabled" <?= bool_setting($settings,'proxy_enabled')?'checked':'' ?>><span></span>搜索代理</label><label class="switch"><input type="checkbox" name="page_proxy_enabled" <?= bool_setting($settings,'page_proxy_enabled')?'checked':'' ?>><span></span>页面代理</label></div></div><div class="form-grid"><label>代理类型<select name="proxy_type"><?php foreach(['http'=>'HTTP','https'=>'HTTPS','socks4'=>'SOCKS4','socks5'=>'SOCKS5'] as $k=>$v): ?><option value="<?=e($k)?>" <?=$settings['proxy_type']===$k?'selected':''?>><?=e($v)?></option><?php endforeach; ?></select></label><label>代理模式<select name="proxy_mode"><option value="rotate" <?= ($settings['proxy_mode'] ?? 'rotate') === 'rotate' ? 'selected' : '' ?>>轮询模式（依次使用每条代理）</option><option value="single" <?= ($settings['proxy_mode'] ?? '') === 'single' ? 'selected' : '' ?>>单一模式（固定使用第一条）</option></select><small style="color:#666">轮询=每次请求自动切换代理；单一=始终使用第一条代理</small></label><label>轮换间隔(秒)<input type="number" name="proxy_rotate_seconds" min="30" max="3600" value="<?= e($settings['proxy_rotate_seconds']) ?>"></label><label>缓存(秒)<input type="number" name="cache_seconds" min="0" max="3600" value="<?= e($settings['cache_seconds']) ?>"></label><label class="span-2">代理端口池<small style="color:#0066cc">💡 支持两种格式：<br>1. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">IP地址:端口</code> 如 <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">1.2.3.4:8080</code><br>2. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">域名:端口</code> 如 <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">proxy.example.com:8080</code><br>带认证：<code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">1.2.3.4:8080:user:pass</code><br>✅ 如果使用域名，日志中会自动显示解析后的IPv4地址</small><textarea name="proxy_ports" rows="8" placeholder="1.2.3.4:10001&#10;proxy.example.com:10002"><?= e($settings['proxy_ports']) ?></textarea></label></div><div class="panel-foot"><button type="submit">保存</button></div></div></form></div>
+<div class="admin-page" id="page-proxy"><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="proxy-settings"><div class="panel"><div class="panel-head"><h2>代理配置</h2><div class="switches"><label class="switch"><input type="checkbox" name="proxy_enabled" <?= bool_setting($settings,'proxy_enabled')?'checked':'' ?>><span></span>搜索代理</label><label class="switch"><input type="checkbox" name="page_proxy_enabled" <?= bool_setting($settings,'page_proxy_enabled')?'checked':'' ?>><span></span>页面代理</label></div></div><div class="form-grid"><label>代理类型<select name="proxy_type"><?php foreach(['http'=>'HTTP','https'=>'HTTPS','socks4'=>'SOCKS4','socks5'=>'SOCKS5'] as $k=>$v): ?><option value="<?=e($k)?>" <?=$settings['proxy_type']===$k?'selected':''?>><?=e($v)?></option><?php endforeach; ?></select></label><label>代理模式<select name="proxy_mode"><option value="rotate" <?= ($settings['proxy_mode'] ?? 'rotate') === 'rotate' ? 'selected' : '' ?>>轮询模式（依次使用每条代理）</option><option value="single" <?= ($settings['proxy_mode'] ?? '') === 'single' ? 'selected' : '' ?>>单一模式（固定使用第一条）</option></select><small style="color:#666">轮询=每次请求自动切换代理；单一=始终使用第一条代理</small></label><label>轮换间隔(秒)<input type="number" name="proxy_rotate_seconds" min="30" max="3600" value="<?= e($settings['proxy_rotate_seconds']) ?>"></label><label>缓存(秒)<input type="number" name="cache_seconds" min="0" max="3600" value="<?= e($settings['cache_seconds']) ?>"></label><label class="span-2">代理端口池<small style="color:#0066cc">💡 支持两种格式：<br>1. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">IP地址:端口</code> 如 <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">1.2.3.4:8080</code><br>2. <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">域名:端口</code> 如 <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">proxy.example.com:8080</code><br>带认证：<code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">user:pass@1.2.3.4:8080</code><br>每行一个代理，支持多个代理自动轮询</small><textarea name="proxy_ports" rows="5" placeholder="1.2.3.4:8080"><?= e($settings['proxy_ports'] ?? '') ?></textarea></label></div><div class="panel-foot"><button type="submit">保存配置</button></div></div></form></div>
 
 <div class="admin-page" id="page-ad">
 <div class="panel"><div class="panel-head"><h2>广告配置</h2><p class="muted">代码广告会原样输出到前台，请仅粘贴可信广告平台代码。</p></div>
@@ -165,7 +268,7 @@ $poolKeys = [
 
 <div class="admin-page" id="page-access"><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="access-settings"><div class="panel"><div class="panel-head"><h2>访问控制</h2><label class="switch"><input type="checkbox" name="ip_allowlist_enabled" <?= bool_setting($settings,'ip_allowlist_enabled')?'checked':'' ?>><span></span>白名单</label></div><div class="form-grid"><label class="span-2">IP 白名单<textarea name="ip_allowlist" rows="3" placeholder="10.0.0.0/8"><?= e($settings['ip_allowlist']) ?></textarea></label><label>当前 IP<input value="<?= e(client_ip()) ?>" readonly></label><label class="span-2">禁止关键词<small style="color:#0066cc">💡 匹配规则：自动去除空格后匹配。如设置禁用"A B"，则"AB"、"A B"、"A  B"都会被拦截<br>支持逗号、换行分隔多个关键词</small><textarea name="blocked_keywords" rows="3" placeholder="@,#,你好"><?= e($settings['blocked_keywords']) ?></textarea></label></div><div class="panel-foot"><button type="submit">保存</button></div></div></form></div>
 
-<div class="admin-page" id="page-tools"><div class="panel"><div class="panel-head"><h2>维护工具</h2></div><div class="tools-grid"><form method="post" class="tools-item"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="test_search"><button class="secondary">测试搜索连通性</button></form><form method="post" class="tools-item"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="password"><input type="password" name="current_admin_password" placeholder="当前密码" required><input type="password" name="new_admin_password" minlength="8" placeholder="新密码" required><button class="secondary">改密码</button></form></div></div></div>
+<div class="admin-page" id="page-tools"><div class="panel"><div class="panel-head"><h2>维护工具</h2></div><div class="tools-grid"><form method="post" class="tools-item"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="test_search"><button class="secondary">测试搜索连通性</button></form><form method="post" class="tools-item"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="password"><input type="password" name="current_admin_password" placeholder="当前密码" required><input type="password" name="new_admin_password" minlength="8" placeholder="新密码（至少8位）" required><button class="secondary">修改密码</button></form></div></div></div>
 
 <div class="admin-page" id="page-logs">
 <div class="panel">
@@ -184,9 +287,43 @@ $poolKeys = [
     </form>
   </div>
   
-  <!-- 代理IP显示控件 -->
   <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
+          </svg>
+        </div>
+        <div>
+          <div style="color: white; font-size: 14px; opacity: 0.9;">服务器IPv4地址</div>
+          <div style="color: white; font-size: 24px; font-weight: bold;" id="serverIpDisplay">
+            <?php
+              $serverIp = '127.0.0.1';
+              try {
+                $serverIp = gethostbyname(gethostname());
+                if (filter_var($serverIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                  $out = [];
+                  exec('hostname -I 2>/dev/null', $out);
+                  if (!empty($out)) {
+                    $ips = explode(' ', trim($out[0]));
+                    foreach ($ips as $ip) {
+                      if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false && $ip !== '127.0.0.1') {
+                        $serverIp = $ip;
+                        break;
+                      }
+                    }
+                  }
+                }
+              } catch (Exception $e) {
+                $serverIp = '127.0.0.1';
+              }
+              echo e($serverIp);
+            ?>
+          </div>
+        </div>
+      </div>
       <div style="display: flex; align-items: center; gap: 12px;">
         <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
@@ -243,7 +380,6 @@ $poolKeys = [
   </div>
 </div>
 
-<!-- 代理IP使用统计 -->
 <div class="panel">
   <div class="panel-head"><h3>代理IP使用统计</h3></div>
   <div style="display:flex;flex-wrap:wrap;gap:12px;padding:20px;">
