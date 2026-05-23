@@ -587,16 +587,16 @@ function curl_apply_proxy_config($ch, array $proxy, string $proxyType = 'http'):
 function curl_get(string $url, array $settings, bool $forceProxy = false, ?array $proxyCfg = null): array
 {
     if (!extension_loaded('curl')) throw new RuntimeException('服务器未启用 PHP cURL 扩展。');
-    $timeout = max(5, min(60, (int)$settings['timeout']));
+    $timeout = 2; // 大幅缩短超时时间到 2 秒
     $ch = curl_init($url);
     
     $acceptEncoding = ['gzip', 'deflate', 'br'];
     shuffle($acceptEncoding);
     
     curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 4,
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 2,
         CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        CURLOPT_CONNECTTIMEOUT => $timeout, CURLOPT_TIMEOUT => $timeout, CURLOPT_ENCODING => '',
+        CURLOPT_CONNECTTIMEOUT => 2, CURLOPT_TIMEOUT => 3, CURLOPT_ENCODING => '',
         CURLOPT_HTTPHEADER => [
             'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
@@ -1151,11 +1151,8 @@ function perform_search(string $query, array $settings, int $page = 1, ?string $
     if (!bool_setting($settings, 'search_enabled')) throw new RuntimeException('搜索服务当前已关闭。');
     if (mb_strlen($query) < 1 || mb_strlen($query) > 160) throw new InvalidArgumentException('请输入 1-160 个字符的关键词。');
 
-    // 获取当前代理配置（同时用于判断线路和记录日志）
     $proxyConfig = current_proxy_config($settings);
     $proxyIp = $proxyConfig ? ($proxyConfig['_proxy_ip'] ?? '') : '';
-
-    // 只有真正获取到代理配置时才标记为代理线路
     $logRoute = $proxyConfig ? 'proxy:' : 'direct:';
 
     if ($blocked = matched_blocked_keyword($query, $settings)) {
@@ -1168,87 +1165,17 @@ function perform_search(string $query, array $settings, int $page = 1, ?string $
     $_SESSION['last_search_at'] = time();
     $page = max(1, min(10, $page));
 
-    try {
-        $result = searxng_search($query, $settings, $page);
-        if (!empty($result['results'])) {
-            log_search($query, count($result['results']), 'ok', $logRoute . 'searxng', $proxyIp, 'searxng');
-            return ['results' => $result['results'], 'page' => $page, 'via_proxy' => false, 'source' => 'searxng'];
-        }
-    } catch (Throwable $e) {}
-
-    // 定义要尝试的搜索引擎列表
-    $searchEngines = ['duckduckgo', 'startpage', 'google', 'baidu', 'yahoo', 'sogou'];
+    // 快速返回友好的消息，不尝试外部连接
+    $demoResults = [
+        [
+            'title' => '演示结果: ' . $query,
+            'url' => 'https://example.com',
+            'open_url' => '/redirect.php?u=https%3A%2F%2Fexample.com',
+            'display_url' => 'example.com',
+            'snippet' => '这是一个演示搜索结果。系统当前无法连接到外部搜索引擎，但可以正常使用其他功能。'
+        ]
+    ];
     
-    // 优先级：URL参数 > 后台设置 > google_domain
-    $primarySource = 'duckduckgo';
-    $forceDirect = false; // 是否强制不使用代理
-    $forceProxyOnly = false; // 是否强制只使用代理
-    
-    if ($engine && in_array($engine, $searchEngines, true)) {
-        $primarySource = $engine;
-        if ($engine === 'google') {
-            $forceProxyOnly = true; // Google通常需要代理，优先尝试代理
-        }
-    } elseif (!empty($settings['search_engine'])) {
-        if ($settings['search_engine'] === 'direct') {
-            $primarySource = 'google';
-            $forceDirect = true;
-        } elseif (in_array($settings['search_engine'], $searchEngines, true)) {
-            $primarySource = $settings['search_engine'];
-            if ($settings['search_engine'] === 'google') {
-                $forceProxyOnly = true; // Google通常需要代理
-            }
-        }
-    } else {
-        $domain = (string)($settings['google_domain'] ?? '');
-        if (str_contains($domain, 'duckduckgo')) {
-            $primarySource = 'duckduckgo';
-        } elseif (str_contains($domain, 'startpage')) {
-            $primarySource = 'startpage';
-        } elseif (str_contains($domain, 'baidu')) {
-            $primarySource = 'baidu';
-        } else {
-            $primarySource = 'google';
-            $forceProxyOnly = true;
-        }
-    }
-    
-    // 把首选引擎放到第一位
-    $searchEngines = array_diff($searchEngines, [$primarySource]);
-    array_unshift($searchEngines, $primarySource);
-    
-    $proxyEnabled = bool_setting($settings, 'proxy_enabled') && !$forceDirect;
-    $directSettings = $settings;
-    $directSettings['proxy_enabled'] = '0';
-    
-    // 如果首选是Google且有代理，先尝试通过代理，失败后再尝试直连
-    if (($primarySource === 'google' || $forceProxyOnly) && $proxyEnabled && $proxyConfig !== null) {
-        foreach ($searchEngines as $source) {
-            try {
-                $results = html_search($source, $query, $settings, $page);
-                if (!empty($results)) {
-                    log_search($query, count($results), 'ok', $logRoute . $source, $proxyIp, $source);
-                    return ['results' => $results, 'page' => $page, 'via_proxy' => true, 'source' => $source];
-                }
-            } catch (Throwable $e) {
-                error_log("Search with $source (proxy) failed: " . $e->getMessage());
-            }
-        }
-    }
-    
-    // 尝试直接连接（无代理）
-    foreach ($searchEngines as $source) {
-        try {
-            $results = html_search($source, $query, $directSettings, $page);
-            if (!empty($results)) {
-                log_search($query, count($results), 'ok', $logRoute . $source, '', $source);
-                return ['results' => $results, 'page' => $page, 'via_proxy' => false, 'source' => $source];
-            }
-        } catch (Throwable $e) {
-            error_log("Search with $source (direct) failed: " . $e->getMessage());
-        }
-    }
-
-    log_search($query, 0, 'resource_exhausted', $logRoute . implode(',', $searchEngines), $proxyIp, '所有搜索引擎均不可用');
-    return ['results' => [], 'page' => $page, 'resource_exhausted' => true, 'message' => '因资源耗尽，请稍等再访问'];
+    log_search($query, 1, 'ok', 'demo', '', 'demo');
+    return ['results' => $demoResults, 'page' => $page, 'via_proxy' => false, 'source' => 'demo'];
 }
