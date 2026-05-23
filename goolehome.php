@@ -184,9 +184,46 @@ $poolKeys = [
     </form>
   </div>
   
-  <!-- 代理IP显示控件 -->
+  <!-- 服务器IP和代理IP显示控件 -->
   <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
+          </svg>
+        </div>
+        <div>
+          <div style="color: white; font-size: 14px; opacity: 0.9;">服务器IPv4地址</div>
+          <div style="color: white; font-size: 24px; font-weight: bold;" id="serverIpDisplay">
+            <?php
+              // 获取服务器IPv4地址
+              $serverIp = '127.0.0.1';
+              try {
+                $serverIp = gethostbyname(gethostname());
+                // 如果获取到的是IPv6或无效，尝试其他方法
+                if (filter_var($serverIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                  $out = [];
+                  exec('hostname -I 2>/dev/null', $out);
+                  if (!empty($out)) {
+                    $ips = explode(' ', trim($out[0]));
+                    foreach ($ips as $ip) {
+                      if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false && $ip !== '127.0.0.1') {
+                        $serverIp = $ip;
+                        break;
+                      }
+                    }
+                  }
+                }
+              } catch (Exception $e) {
+                $serverIp = '127.0.0.1';
+              }
+              echo e($serverIp);
+            ?>
+          </div>
+        </div>
+      </div>
       <div style="display: flex; align-items: center; gap: 12px;">
         <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
