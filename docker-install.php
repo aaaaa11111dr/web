@@ -75,7 +75,7 @@ try {
 
 // 创建管理员账户
 $adminUser = 'admin';
-$adminPass = 'Admin1234';
+$adminPass = 'rootroot';
 
 try {
     $stmt = $pdo->prepare('INSERT INTO `admins` (`username`, `password_hash`, `created_at`, `updated_at`) VALUES (?, ?, ?, ?)');

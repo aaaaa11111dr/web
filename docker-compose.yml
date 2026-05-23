@@ -13,16 +13,16 @@ services:
     environment:
       - DB_HOST=db
       - DB_NAME=wow_search
-      - DB_USER=search_user
-      - DB_PASSWORD=search_pass123
+      - DB_USER=admin
+      - DB_PASSWORD=rootroot
 
   db:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_ROOT_PASSWORD: rootroot
       MYSQL_DATABASE: wow_search
-      MYSQL_USER: search_user
-      MYSQL_PASSWORD: search_pass123
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: rootroot
     volumes:
       - mysql_data:/var/lib/mysql
       - ./database:/docker-entrypoint-initdb.d
